@@ -1,56 +1,34 @@
-
 import streamlit as st
-import numpy as np
 import pickle
-from PIL import Image
+import cv2
+import numpy as np
 
+# ✅ Load model from GitHub repo (keep the .pkl file in same folder as this file)
 @st.cache_resource
 def load_model():
-    model_path = "/home/sahildogra/Downloads/train1.py/saved_models/log_reg_20250820_133401.pkl"
+    model_path = "log_reg_20250820_133401.pkl"  # relative path
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     return model
 
 model = load_model()
 
-# find the expected input features from model
-n_features = model.n_features_in_  # e.g., 12288
+st.title("🖼️ Image Classifier")
 
-# infer image size
-img_size = int(np.sqrt(n_features)) if int(np.sqrt(n_features))**2 == n_features else None
-if img_size is None:
-    # probably RGB flatten
-    img_size = int(np.sqrt(n_features // 3))
-    channels = 3
-else:
-    channels = 1
-
-st.title("🩻 Pneumonia Detection App (Local Model)")
-
-uploaded_file = st.file_uploader("Upload a Chest X-ray Image", type=["jpg", "jpeg", "png"])
+# File uploader
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    image = Image.open(uploaded_file)
+    # Convert file to OpenCV format
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, 1)
+    st.image(image, channels="BGR", caption="Uploaded Image", use_container_width=True)
 
-    if channels == 1:
-        image = image.convert("L")  # grayscale
-    else:
-        image = image.convert("RGB")  # RGB
+    # Preprocess image (⚠️ adjust according to how you trained your model)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (128, 128))   # example resize
+    flattened = resized.flatten().reshape(1, -1)
 
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-
-    # Resize to match training size
-    image = image.resize((img_size, img_size))  
-    img_array = np.array(image) / 255.0
-
-    if channels == 1:
-        img_array = img_array.reshape(1, -1)  # flatten grayscale
-    else:
-        img_array = img_array.reshape(1, -1)  # flatten RGB
-
-    prediction = model.predict(img_array)
-
-    if prediction[0] == 0:
-        st.success("✅ Prediction: NORMAL")
-    else:
-        st.error("⚠️ Prediction: PNEUMONIA")
+    # Prediction
+    prediction = model.predict(flattened)[0]
+    st.success(f"✅ Prediction: {prediction}")
